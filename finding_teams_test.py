@@ -1,13 +1,5 @@
 import requests
 from bs4 import BeautifulSoup
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import schedule
-import time
-
-# Teams to track update
-# TEAMS = ["Tennessee", "Indiana", "Louisville", "Oklahoma", "Alabama", "Florida State"]
 
 # API URL
 top_url = 'https://ncaa-api.henrygd.me/rankings/softball/d1/espncom/usa-softball'
@@ -21,11 +13,6 @@ TOP25 = {team['COLLEGE'].split(' (')[0].strip() for team in data.get('data', [])
 
 # Website URL
 URL = "https://www.sportsmediawatch.com/tv-schedules/college-softball-tv-schedule/"
-
-# Gmail credentials
-GMAIL_USER = "rhamby95@gmail.com"
-GMAIL_PASS = "hjmdygespqhybmet"
-RECIPIENT_EMAIL = "arcoleman18@gmail.com"
 
 def scrape_schedule():
     """Scrape today's college softball games and filter only Top 25 matchups."""
@@ -71,41 +58,7 @@ def scrape_schedule():
                 games.append(f"{teams} @ {game_time} on {channel}")
 
     return games
-# today_games = scrape_schedule()
-# print("\nToday's Games for Selected Teams:")
-# print("\n".join(today_games) if today_games else "No games found for today.")
 
-def send_email(games):
-    """Send an email with the filtered game schedule."""
-    if not games:
-        print("No games found for tracked teams today.")
-        return  
-
-    subject = "College Softball Schedule - Today's Games"
-    body = "Top 25 Schedule:\n\n" + "\n".join(games)
-
-    msg = MIMEMultipart()
-    msg["From"] = GMAIL_USER
-    msg["To"] = RECIPIENT_EMAIL
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(body, "plain"))
-
-    try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(GMAIL_USER, GMAIL_PASS)
-        server.sendmail(GMAIL_USER, RECIPIENT_EMAIL, msg.as_string())
-        server.quit()
-        print("Email sent successfully!")
-    except Exception as e:
-        print(f"Error sending email: {e}")
-
-def job():
-    """Scheduled job to scrape and send an email."""
-    games = scrape_schedule()
-    send_email(games)
-
-# Run job immediately when the script is executed
-job()
-
+today_games = scrape_schedule()
+print("\nToday's Games for Selected Teams:")
+print("\n".join(today_games) if today_games else "No games found for today.")
