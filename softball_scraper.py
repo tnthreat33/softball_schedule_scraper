@@ -3,13 +3,16 @@ from bs4 import BeautifulSoup
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-import schedule
-import time
 
-# Teams to track update
-# TEAMS = ["Tennessee", "Indiana", "Louisville", "Oklahoma", "Alabama", "Florida State"]
+# Teams to track
+FAV_TEAMS = ["Indiana", "Louisville", "Butler", "Northwestern"]
+SEC_TEAMS = [
+    "Alabama", "Arkansas", "Auburn", "Florida", "Georgia", "Kentucky",
+    "LSU", "Mississippi State", "Missouri", "Ole Miss", "South Carolina",
+    "Tennessee", "Texas A&M", "Vanderbilt"
+]
 
-# API URL
+# API URL for rankings
 top_url = 'https://ncaa-api.henrygd.me/rankings/softball/d1/espncom/usa-softball'
 
 # Fetch rankings data
@@ -28,34 +31,36 @@ GMAIL_PASS = "hjmdygespqhybmet"
 RECIPIENT_EMAIL = "arcoleman18@gmail.com"
 
 def scrape_schedule():
-    """Scrape today's college softball games and filter only Top 25 matchups."""
+    """Scrape today's college softball games and categorize them into Favorite, SEC, and Top 25 teams."""
     response = requests.get(URL)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    games = []
+    fav_games = []
+    sec_games = []
+    top25_games = []
 
-    # Locate the "Today" section using <a name="Today">
+    # Locate the "Today" section
     today_section = soup.find("a", {"name": "Today"})
     if not today_section:
         print("Could not find 'Today' section.")
-        return games
+        return fav_games, sec_games, top25_games
 
-    # Find the next table containing games for today
+    # Find today's schedule table
     today_table = today_section.find_next("table", class_="schedule-table")
     
     if not today_table:
         print("No games listed for today.")
-        return games
+        return fav_games, sec_games, top25_games
 
-    # Extract game details by looking for <td> with "Time (ET)"
+    # Extract game details
     time_cells = today_table.find_all("td", {"data-label": "Time (ET)"})
     game_cells = today_table.find_all("td", {"data-label": "Game / TV"})
 
     if not time_cells or not game_cells:
         print("No valid game rows found.")
-        return games
+        return fav_games, sec_games, top25_games
 
-    # Iterate over extracted time and game cells
+    # Categorize games
     for time_cell, game_cell in zip(time_cells, game_cells):
         game_time = time_cell.text.strip()
         matchup = game_cell.find("div", class_="matchup-details")
@@ -64,31 +69,38 @@ def scrape_schedule():
         if matchup:
             teams = matchup.text.strip()
             team_names = [t.strip() for t in teams.split(" vs ")]
+            channel = network.text.strip() if network else "Unknown Channel"
+            game_info = f"{teams} @ {game_time} on {channel}"
 
-            # Exact match check
-            if any(team in TOP25 for team in team_names):
-                channel = network.text.strip() if network else "Unknown Channel"
-                games.append(f"{teams} @ {game_time} on {channel}")
+            if any(team in FAV_TEAMS for team in team_names):
+                fav_games.append(game_info)
+            elif any(team in SEC_TEAMS for team in team_names):
+                sec_games.append(game_info)
+            elif any(team in TOP25 for team in team_names):
+                top25_games.append(game_info)
 
-    return games
-# today_games = scrape_schedule()
-# print("\nToday's Games for Selected Teams:")
-# print("\n".join(today_games) if today_games else "No games found for today.")
+    return fav_games, sec_games, top25_games
 
-def send_email(games):
-    """Send an email with the filtered game schedule."""
-    if not games:
+def send_email(fav_games, sec_games, top25_games):
+    """Send an email with the categorized game schedule."""
+    if not (fav_games or sec_games or top25_games):
         print("No games found for tracked teams today.")
         return  
 
     subject = "College Softball Schedule - Today's Games"
-    body = "Top 25 Schedule:\n\n" + "\n".join(games)
+    body = ""
+
+    if fav_games:
+        body += "📌 **Favorite Teams Schedule:**\n" + "\n".join(fav_games) + "\n\n"
+    if sec_games:
+        body += "⚾ **SEC Teams Schedule:**\n" + "\n".join(sec_games) + "\n\n"
+    if top25_games:
+        body += "🏆 **Top 25 Schedule:**\n" + "\n".join(top25_games) + "\n\n"
 
     msg = MIMEMultipart()
     msg["From"] = GMAIL_USER
     msg["To"] = RECIPIENT_EMAIL
     msg["Subject"] = subject
-
     msg.attach(MIMEText(body, "plain"))
 
     try:
@@ -103,9 +115,8 @@ def send_email(games):
 
 def job():
     """Scheduled job to scrape and send an email."""
-    games = scrape_schedule()
-    send_email(games)
+    fav_games, sec_games, top25_games = scrape_schedule()
+    send_email(fav_games, sec_games, top25_games)
 
 # Run job immediately when the script is executed
 job()
-
