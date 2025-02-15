@@ -1,3 +1,4 @@
+from http.server import BaseHTTPRequestHandler
 import os
 import requests
 from bs4 import BeautifulSoup
@@ -5,6 +6,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -133,14 +135,17 @@ def job():
     fav_games, sec_games, top25_games = scrape_schedule()
     send_email(fav_games, sec_games, top25_games)
 
-def handler(event, context):
-    logger.info("Cron job started")
-    try:
+# Vercel expects a class-based HTTP handler
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        """Handles incoming GET requests."""
+        self.send_response(200)
+        self.send_header("Content-type", "application/json")
+        self.end_headers()
+
+        # Run the scraping and email job
         job()
-        logger.info("Cron job completed successfully")
-    except Exception as e:
-        logger.error(f"Error in cron job: {e}")
-    return {
-        'statusCode': 200,
-        'body': 'Cron job executed successfully!'
-    }
+
+        # Return a response
+        response_data = json.dumps({"status": "Cron job executed successfully"})
+        self.wfile.write(response_data.encode())
