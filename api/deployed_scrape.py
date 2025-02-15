@@ -1,3 +1,5 @@
+# api/schedule.py
+import os
 import requests
 from bs4 import BeautifulSoup
 import smtplib
@@ -26,7 +28,9 @@ TOP25 = {team['COLLEGE'].split(' (')[0].strip() for team in data.get('data', [])
 URL = "https://www.sportsmediawatch.com/tv-schedules/college-softball-tv-schedule/"
 
 # Gmail credentials
-
+GMAIL_USER = os.getenv('GMAIL_USER')
+GMAIL_PASS = os.getenv('GMAIL_PASS')
+RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
 
 def scrape_schedule():
     """Scrape today's college softball games and categorize them into Favorite, SEC, and Top 25 teams."""
@@ -116,5 +120,9 @@ def job():
     fav_games, sec_games, top25_games = scrape_schedule()
     send_email(fav_games, sec_games, top25_games)
 
-# Run job immediately when the script is executed
-job()
+def handler(event, context):
+    job()
+    return {
+        'statusCode': 200,
+        'body': 'Cron job executed successfully!'
+    }
