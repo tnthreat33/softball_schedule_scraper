@@ -1,10 +1,14 @@
-# api/schedule.py
 import os
 import requests
 from bs4 import BeautifulSoup
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Teams to track
 FAV_TEAMS = ["Indiana", "Louisville", "Butler", "Northwestern"]
@@ -17,15 +21,18 @@ SEC_TEAMS = [
 # API URL for rankings
 top_url = 'https://ncaa-api.henrygd.me/rankings/softball/d1/espncom/usa-softball'
 
-# Fetch rankings data
-response = requests.get(top_url)
-data = response.json()
-
-# Extract top 25 teams and normalize names
-TOP25 = {team['COLLEGE'].split(' (')[0].strip() for team in data.get('data', [])[:25]}
-
 # Website URL
 URL = "https://www.sportsmediawatch.com/tv-schedules/college-softball-tv-schedule/"
+
+# Fetch rankings data
+try:
+    response = requests.get(top_url)
+    response.raise_for_status()
+    data = response.json()
+    TOP25 = {team['COLLEGE'].split(' (')[0].strip() for team in data.get('data', [])[:25]}
+except Exception as e:
+    logger.error(f"Error fetching or parsing rankings data: {e}")
+    TOP25 = set()  # Fallback to an empty set if the request fails
 
 # Gmail credentials
 GMAIL_USER = os.getenv('GMAIL_USER')
@@ -34,59 +41,65 @@ RECIPIENT_EMAIL = os.getenv('RECIPIENT_EMAIL')
 
 def scrape_schedule():
     """Scrape today's college softball games and categorize them into Favorite, SEC, and Top 25 teams."""
-    response = requests.get(URL)
-    soup = BeautifulSoup(response.text, "html.parser")
+    try:
+        response = requests.get(URL)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
 
-    fav_games = []
-    sec_games = []
-    top25_games = []
+        fav_games = []
+        sec_games = []
+        top25_games = []
 
-    # Locate the "Today" section
-    today_section = soup.find("a", {"name": "Today"})
-    if not today_section:
-        print("Could not find 'Today' section.")
+        # Locate the "Today" section
+        today_section = soup.find("a", {"name": "Today"})
+        if not today_section:
+            logger.info("Could not find 'Today' section.")
+            return fav_games, sec_games, top25_games
+
+        # Find today's schedule table
+        today_table = today_section.find_next("table", class_="schedule-table")
+        
+        if not today_table:
+            logger.info("No games listed for today.")
+            return fav_games, sec_games, top25_games
+
+        # Extract game details
+        time_cells = today_table.find_all("td", {"data-label": "Time (ET)"})
+        game_cells = today_table.find_all("td", {"data-label": "Game / TV"})
+
+        if not time_cells or not game_cells:
+            logger.info("No valid game rows found.")
+            return fav_games, sec_games, top25_games
+
+        # Categorize games
+        for time_cell, game_cell in zip(time_cells, game_cells):
+            game_time = time_cell.text.strip()
+            matchup = game_cell.find("div", class_="matchup-details")
+            network = game_cell.find("div", class_="tv-details")
+
+            if matchup:
+                teams = matchup.text.strip()
+                team_names = [t.strip() for t in teams.split(" vs ")]
+                channel = network.text.strip() if network else "Unknown Channel"
+                game_info = f"{teams} @ {game_time} on {channel}"
+
+                if any(team in FAV_TEAMS for team in team_names):
+                    fav_games.append(game_info)
+                elif any(team in SEC_TEAMS for team in team_names):
+                    sec_games.append(game_info)
+                elif any(team in TOP25 for team in team_names):
+                    top25_games.append(game_info)
+
         return fav_games, sec_games, top25_games
 
-    # Find today's schedule table
-    today_table = today_section.find_next("table", class_="schedule-table")
-    
-    if not today_table:
-        print("No games listed for today.")
-        return fav_games, sec_games, top25_games
-
-    # Extract game details
-    time_cells = today_table.find_all("td", {"data-label": "Time (ET)"})
-    game_cells = today_table.find_all("td", {"data-label": "Game / TV"})
-
-    if not time_cells or not game_cells:
-        print("No valid game rows found.")
-        return fav_games, sec_games, top25_games
-
-    # Categorize games
-    for time_cell, game_cell in zip(time_cells, game_cells):
-        game_time = time_cell.text.strip()
-        matchup = game_cell.find("div", class_="matchup-details")
-        network = game_cell.find("div", class_="tv-details")
-
-        if matchup:
-            teams = matchup.text.strip()
-            team_names = [t.strip() for t in teams.split(" vs ")]
-            channel = network.text.strip() if network else "Unknown Channel"
-            game_info = f"{teams} @ {game_time} on {channel}"
-
-            if any(team in FAV_TEAMS for team in team_names):
-                fav_games.append(game_info)
-            elif any(team in SEC_TEAMS for team in team_names):
-                sec_games.append(game_info)
-            elif any(team in TOP25 for team in team_names):
-                top25_games.append(game_info)
-
-    return fav_games, sec_games, top25_games
+    except Exception as e:
+        logger.error(f"Error scraping schedule: {e}")
+        return [], [], []
 
 def send_email(fav_games, sec_games, top25_games):
     """Send an email with the categorized game schedule."""
     if not (fav_games or sec_games or top25_games):
-        print("No games found for tracked teams today.")
+        logger.info("No games found for tracked teams today.")
         return  
 
     subject = "College Softball Schedule - Today's Games"
@@ -111,9 +124,9 @@ def send_email(fav_games, sec_games, top25_games):
         server.login(GMAIL_USER, GMAIL_PASS)
         server.sendmail(GMAIL_USER, RECIPIENT_EMAIL, msg.as_string())
         server.quit()
-        print("Email sent successfully!")
+        logger.info("Email sent successfully!")
     except Exception as e:
-        print(f"Error sending email: {e}")
+        logger.error(f"Error sending email: {e}")
 
 def job():
     """Scheduled job to scrape and send an email."""
@@ -121,7 +134,12 @@ def job():
     send_email(fav_games, sec_games, top25_games)
 
 def handler(event, context):
-    job()
+    logger.info("Cron job started")
+    try:
+        job()
+        logger.info("Cron job completed successfully")
+    except Exception as e:
+        logger.error(f"Error in cron job: {e}")
     return {
         'statusCode': 200,
         'body': 'Cron job executed successfully!'

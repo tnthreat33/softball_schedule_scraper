@@ -1,4 +1,17 @@
 {
+    "version": 2,
+    "builds": [
+      {
+        "src": "api/deployed_scrape.py",
+        "use": "@vercel/python"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/(.*)",
+        "dest": "api/deployed_scrape.py"
+      }
+    ],
     "crons": [
       {
         "path": "/api/deployed_scrape",
