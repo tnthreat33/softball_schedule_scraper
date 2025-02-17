@@ -15,7 +15,7 @@
     "crons": [
       {
         "path": "/api/deployed_scrape",
-        "schedule": "0 5 * * *"
+        "schedule": "0 12 * * *"
       }
     ]
   }
