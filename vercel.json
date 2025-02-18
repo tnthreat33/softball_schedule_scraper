@@ -1,21 +1,26 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "api/deployed_scrape.py",
-        "use": "@vercel/python"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "api/deployed_scrape.py"
-      }
-    ],
-    "crons": [
-      {
-        "path": "/api/deployed_scrape",
-        "schedule": "0 12 * * *"
-      }
-    ]
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/deployed_scrape.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/deployed_scrape",
+      "dest": "api/deployed_scrape.py"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/deployed_scrape",
+      "schedule": "0 12 * * *"
+    }
+  ],
+  "functions": {
+    "api/deployed_scrape.py": {
+      "runtime": "python3.9"
+    }
   }
+}
